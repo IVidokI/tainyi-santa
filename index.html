@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Таємний Санта ПСХ</title>
+<meta name="theme-color" content="#7a1420">
+<style>
+:root{--red:#b3202f;--dark:#7a1420;--gold:#e8b44c;--cream:#fff8ec;--ink:#2a1a1a;--mute:#7b6a66;--ok:#2e7d4f;--bad:#b3202f;--line:#ecdcc8}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);background:linear-gradient(180deg,var(--dark),#4a0b14);min-height:100vh;min-height:100dvh}
+#snow{position:fixed;inset:0;pointer-events:none;z-index:0}
+.wrap{position:relative;z-index:1;max-width:520px;margin:0 auto;padding:20px 16px 40px}
+header{text-align:center;color:#fff;margin:8px 0 18px}
+header .emoji{font-size:46px;line-height:1}
+header h1{margin:6px 0 2px;font-size:26px;letter-spacing:.3px}
+header p{margin:0;color:#f3d9b8;font-size:14px}
+.card{background:var(--cream);border-radius:18px;padding:22px 18px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.card h2{margin:0 0 10px;font-size:20px;color:var(--dark)}
+.card p{line-height:1.45;margin:0 0 12px}
+.mute{color:var(--mute);font-size:14px}
+label{display:block;font-weight:600;margin:14px 0 6px;font-size:15px}
+label small{font-weight:400;color:var(--mute)}
+input[type=text],textarea{width:100%;font:inherit;font-size:16px;padding:12px;border:2px solid var(--line);border-radius:12px;background:#fff;color:var(--ink)}
+textarea{resize:vertical;min-height:70px}
+input:focus,textarea:focus{outline:none;border-color:var(--gold)}
+button{font:inherit;cursor:pointer;border:0;border-radius:12px;padding:14px 18px;font-weight:700;font-size:16px;width:100%;margin-top:14px;background:var(--red);color:#fff;transition:transform .05s}
+button:active{transform:scale(.98)}
+button.ghost{background:transparent;color:var(--dark);border:2px solid var(--line)}
+button.gold{background:var(--gold);color:var(--ink)}
+button:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:10px}.row button{margin-top:10px}
+.list{max-height:240px;overflow:auto;border:2px solid var(--line);border-radius:12px;margin-top:8px;background:#fff}
+.list button{display:block;width:100%;text-align:left;margin:0;border-radius:0;background:#fff;color:var(--ink);font-weight:500;padding:12px;border-bottom:1px solid var(--line)}
+.list button:last-child{border-bottom:0}
+.list button:hover,.list button.sel{background:#fdeccc}
+.list .none{padding:12px;color:var(--mute)}
+.picked{margin-top:10px;padding:10px 12px;background:#fdeccc;border-radius:12px;font-weight:700}
+.err{background:#fde8e8;color:var(--bad);border-radius:12px;padding:10px 12px;margin-top:12px;font-size:14px}
+.reveal{text-align:center;padding:26px 10px}
+.reveal .big{font-size:24px;font-weight:800;color:var(--red);margin:10px 0}
+.facts{list-style:none;padding:0;margin:0}
+.facts li{background:#fff;border:2px solid var(--line);border-radius:12px;padding:12px 12px 12px 44px;margin-bottom:10px;position:relative;line-height:1.4;word-wrap:break-word}
+.facts li::before{content:attr(data-n);position:absolute;left:10px;top:50%;transform:translateY(-50%);width:24px;height:24px;border-radius:50%;background:var(--gold);font-weight:800;text-align:center;line-height:24px;font-size:13px}
+.facts li.hint{border-color:var(--gold);background:#fff6df;animation:pop .4s}
+@keyframes pop{from{transform:scale(.95);opacity:0}to{transform:none;opacity:1}}
+.dots{display:flex;gap:8px;justify-content:center;margin:6px 0 14px}
+.dots span{width:14px;height:14px;border-radius:50%;background:var(--line)}
+.dots span.used{background:var(--bad)}.dots span.win{background:var(--ok)}
+.tried{font-size:14px;color:var(--mute);margin:8px 0}
+.tried s{color:var(--bad)}
+.msg{text-align:center;padding:18px 12px;border-radius:14px;margin-top:10px;line-height:1.45}
+.msg.win{background:#e4f4ea;color:#1c5a37}.msg.lost{background:#fdeccc;color:var(--dark)}
+.msg .em{font-size:44px}
+.msg b.name{display:block;font-size:22px;margin-top:6px}
+.qrbox{background:#fff;border:2px dashed var(--gold);border-radius:16px;padding:16px;text-align:center;margin:10px 0}
+.qrbox img{width:230px;max-width:100%;image-rendering:pixelated}
+.qrbox .cap{font-weight:700;color:var(--dark);margin-top:8px}
+.hidden{display:none!important}
+.spin{text-align:center;color:#fff;padding:40px 0}
+@media print{body{background:#fff}#snow,header,.noprint{display:none!important}.card{box-shadow:none;background:#fff}}
+</style>
+</head>
+<body>
+<canvas id="snow"></canvas>
+<div class="wrap">
+  <header>
+    <div class="emoji">🎅</div>
+    <h1>Таємний Санта</h1>
+    <p>Перший столичний хлібозавод</p>
+  </header>
+  <div id="app"><div class="spin">Завантаження…</div></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>
+// ВСТАВТЕ URL розгорнутого Apps Script (Deploy → Web app → URL, закінчується на /exec)
+var API_URL = 'https://script.google.com/macros/s/AKfycbyX7EbEgr5N_en9wA-Z1J7SMmk9cOVLuKtRu9VmK58jHVlNigxsq2llkufiQiu01kou7g/exec';
+
+var app = document.getElementById('app');
+var NAMES = [];
+
+// ---------- утиліти ----------
+function el(tag, attrs, kids) {
+  var e = document.createElement(tag);
+  for (var k in (attrs || {})) {
+    if (k === 'class') e.className = attrs[k];
+    else if (k === 'text') e.textContent = attrs[k];
+    else if (k.slice(0, 2) === 'on') e.addEventListener(k.slice(2), attrs[k]);
+    else e.setAttribute(k, attrs[k]);
+  }
+  [].concat(kids || []).forEach(function (c) { if (c != null) e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+  return e;
+}
+function show() { app.innerHTML = ''; [].slice.call(arguments).forEach(function (n) { app.appendChild(n); }); window.scrollTo(0, 0); }
+function api(payload) {
+  return fetch(API_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) })
+    .then(function (r) { return r.json(); })
+    .catch(function () { return { status: 'error', message: 'Немає зв\'язку із сервером. Спробуйте ще раз.' }; });
+}
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} return null; }
+function errBox(msg) { return el('div', { class: 'err', text: msg }); }
+function norm(s) { return String(s).toLowerCase().replace(/[ʼ’`]/g, "'").replace(/ё/g, 'е'); }
+
+// Пошуковий вибір зі списку імен. onPick(name) викликається при виборі.
+function picker(names, onPick) {
+  var input = el('input', { type: 'text', placeholder: 'Почніть вводити прізвище…', autocomplete: 'off', 'aria-label': 'Пошук ПІБ' });
+  var list = el('div', { class: 'list' });
+  function render() {
+    var q = norm(input.value.trim());
+    list.innerHTML = '';
+    var m = names.filter(function (n) { return !q || norm(n).indexOf(q) !== -1; });
+    if (!m.length) list.appendChild(el('div', { class: 'none', text: 'Нікого не знайдено' }));
+    m.forEach(function (n) { list.appendChild(el('button', { type: 'button', text: n, onclick: function () { onPick(n); } })); });
+  }
+  input.addEventListener('input', render);
+  render();
+  return el('div', {}, [input, list]);
+}
+
+// ---------- сніг ----------
+(function () {
+  var c = document.getElementById('snow'), x = c.getContext('2d'), f = [];
+  function size() { c.width = innerWidth; c.height = innerHeight; }
+  size(); addEventListener('resize', size);
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  for (var i = 0; i < 50; i++) f.push({ x: Math.random() * innerWidth, y: Math.random() * innerHeight, r: 1 + Math.random() * 2.5, s: .3 + Math.random() * .8 });
+  (function tick() {
+    x.clearRect(0, 0, c.width, c.height); x.fillStyle = 'rgba(255,255,255,.75)';
+    f.forEach(function (p) { p.y += p.s; p.x += Math.sin(p.y / 40) * .3; if (p.y > c.height) { p.y = -5; p.x = Math.random() * c.width; } x.beginPath(); x.arc(p.x, p.y, p.r, 0, 6.3); x.fill(); });
+    requestAnimationFrame(tick);
+  })();
+})();
+
+// ================= САНТА =================
+function screenName(msg) {
+  var chosen = null;
+  var pickedBox = el('div', { class: 'picked hidden' });
+  var go = el('button', { text: 'Далі', disabled: 'disabled', onclick: doLogin });
+  var errSlot = el('div');
+  var pk = picker(NAMES, function (n) {
+    chosen = n; pickedBox.textContent = '✓ ' + n; pickedBox.classList.remove('hidden'); go.removeAttribute('disabled');
+  });
+  function doLogin() {
+    go.disabled = true; go.textContent = 'Шукаємо…';
+    api({ action: 'login', name: chosen }).then(function (r) {
+      if (r.status !== 'ok') { go.disabled = false; go.textContent = 'Далі'; errSlot.innerHTML = ''; errSlot.appendChild(errBox(r.message)); return; }
+      store('santa_name', chosen); screenReveal(r);
+    });
+  }
+  show(el('div', { class: 'card' }, [
+    el('h2', { text: 'Привіт! Хто ти?' }),
+    el('p', { class: 'mute', text: 'Знайди себе у списку — і дізнаєшся, кому цього року будеш таємним Сантою.' }),
+    pk, pickedBox, errSlot, go
+  ]));
+  if (msg) errSlot.appendChild(errBox(msg));
+}
+
+function screenReveal(r) {
+  var btn = el('button', { class: 'gold', text: '🎁 Показати, кому я дарую', onclick: function () {
+    show(el('div', { class: 'card reveal' }, [
+      el('div', { class: 'mute', text: 'Ти — таємний Санта для' }),
+      el('div', { class: 'big', text: r.recipient }),
+      el('p', { class: 'mute', text: 'Нікому не кажи! Тепер напиши про себе факти, за якими ' + r.recipient.split(' ')[1] + ' зможе тебе відгадати.' }),
+      el('button', { text: 'Далі — написати факти', onclick: function () { screenFacts(r); } }),
+      el('button', { class: 'ghost', text: 'Це не я', onclick: function () { store('santa_name', null); screenName(); } })
+    ]));
+  } });
+  show(el('div', { class: 'card reveal' }, [
+    el('div', { style: 'font-size:54px', text: '🤫' }),
+    el('h2', { text: r.giver.split(' ')[1] ? 'Привіт, ' + r.giver.split(' ')[1] + '!' : 'Привіт!' }),
+    el('p', { class: 'mute', text: 'Переконайся, що поруч ніхто не дивиться на екран.' }),
+    btn,
+    el('button', { class: 'ghost', text: 'Це не я', onclick: function () { store('santa_name', null); screenName(); } })
+  ]));
+}
+
+function screenFacts(r) {
+  var f = r.facts || [];
+  var tas = [], defs = [
+    ['Факт 1', 'Наприклад: «Люблю гори і не люблю будильники»'],
+    ['Факт 2', 'Наприклад: «У мене вдома живе рудий кіт»'],
+    ['Факт 3', 'Те, що не видасть вас одразу 😉'],
+    ['Підказка 1', 'Відкриється після 1-ї невдалої спроби — трохи прозоріша'],
+    ['Підказка 2', 'Відкриється після 2-ї невдалої спроби — майже очевидна']
+  ];
+  var errSlot = el('div');
+  var save = el('button', { text: r.locked ? 'Змінити вже не можна' : 'Зберегти і отримати QR', onclick: doSave });
+  if (r.locked) save.disabled = true;
+  var nodes = [el('h2', { text: 'Розкажи про себе' }),
+    el('p', { class: 'mute', text: 'Пишіть так, щоб людина здогадалась, але не одразу. Не згадуйте посаду, відділ і стать — це занадто просто.' })];
+  defs.forEach(function (d, i) {
+    var ta = el('textarea', { maxlength: 300, placeholder: d[1], rows: 2 });
+    ta.value = f[i] || ''; if (r.locked) ta.disabled = true; tas.push(ta);
+    nodes.push(el('label', {}, [d[0], i >= 3 ? el('small', { text: ' (необовʼязково складна)' }) : null]));
+    nodes.push(ta);
+  });
+  nodes.push(errSlot, save, el('button', { class: 'ghost', text: 'Назад', onclick: function () { screenReveal(r); } }));
+  show(el('div', { class: 'card' }, nodes));
+  function doSave() {
+    var facts = tas.map(function (t) { return t.value.trim(); });
+    errSlot.innerHTML = '';
+    if (facts.some(function (s) { return !s; })) { errSlot.appendChild(errBox('Заповніть усі 5 полів.')); return; }
+    save.disabled = true; save.textContent = 'Зберігаємо…';
+    api({ action: 'saveFacts', name: r.giver, facts: facts }).then(function (x) {
+      if (x.status !== 'ok') { save.disabled = false; save.textContent = 'Зберегти і отримати QR'; errSlot.appendChild(errBox(x.message)); return; }
+      r.facts = facts; r.token = x.token; screenQR(r);
+    });
+  }
+}
+
+function giftUrl(token) { return location.origin + location.pathname + '?g=' + encodeURIComponent(token); }
+
+function makeQrDataUrl(url, cell) {
+  var q = qrcode(0, 'M'); q.addData(url); q.make();
+  return q.createDataURL(cell || 8, 2);
+}
+
+// PNG-етикетка для друку/збереження: QR + підпис.
+function makeTagPng(url) {
+  return new Promise(function (res) {
+    var img = new Image();
+    img.onload = function () {
+      var W = 640, H = 760, c = document.createElement('canvas'); c.width = W; c.height = H;
+      var x = c.getContext('2d');
+      x.fillStyle = '#fff8ec'; x.fillRect(0, 0, W, H);
+      x.strokeStyle = '#e8b44c'; x.lineWidth = 6; x.setLineDash([16, 10]); x.strokeRect(14, 14, W - 28, H - 28); x.setLineDash([]);
+      x.textAlign = 'center'; x.fillStyle = '#7a1420';
+      x.font = 'bold 40px system-ui,sans-serif'; x.fillText('🎅 Таємний Санта', W / 2, 90);
+      x.imageSmoothingEnabled = false; x.drawImage(img, 90, 130, 460, 460);
+      x.font = 'bold 30px system-ui,sans-serif'; x.fillText('Скануй і відгадай,', W / 2, 650);
+      x.fillText('хто твій Санта', W / 2, 692);
+      res(c.toDataURL('image/png'));
+    };
+    img.src = makeQrDataUrl(url, 10);
+  });
+}
+
+function screenQR(r) {
+  var url = giftUrl(r.token);
+  var png = null;
+  var box = el('div', { class: 'qrbox' }, [el('img', { src: makeQrDataUrl(url, 8), alt: 'QR-код для подарунка' }), el('div', { class: 'cap', text: 'Скануй і відгадай, хто твій Санта' })]);
+  var dl = el('button', { class: 'gold', text: '⬇ Завантажити етикетку (PNG)', onclick: function () {
+    makeTagPng(url).then(function (d) { var a = el('a', { href: d, download: 'santa-qr.png' }); document.body.appendChild(a); a.click(); a.remove(); });
+  } });
+  show(el('div', { class: 'card' }, [
+    el('h2', { text: '✅ Готово!' }),
+    el('p', { text: 'Роздрукуй або збережи цей QR-код і прикріпи до подарунка для ' + r.recipient + '.' }),
+    box, dl,
+    el('button', { class: 'noprint', text: '🖨 Друкувати', onclick: function () { window.print(); } }),
+    el('button', { class: 'ghost noprint', text: '✏ Змінити факти', onclick: function () { screenFacts(r); } }),
+    el('p', { class: 'mute noprint', style: 'margin-top:14px', text: 'Цю сторінку можна відкрити пізніше: введи своє ПІБ — QR-код і факти збережуться.' })
+  ]));
+}
+
+// ================= ОДЕРЖУВАЧ (QR на подарунку) =================
+function screenGuess(token, r) {
+  var nodes = [];
+  var done = r.state === 'won' || r.state === 'lost';
+  nodes.push(el('h2', { text: '🎁 Хто твій таємний Санта?' }));
+  if (r.state === 'empty') {
+    show(el('div', { class: 'card' }, [nodes[0], el('p', { text: 'Санта ще не встиг написати підказки. Спробуй трохи пізніше 😉' })]));
+    return;
+  }
+  var dots = el('div', { class: 'dots' });
+  for (var i = 0; i < r.max; i++) dots.appendChild(el('span', { class: r.state === 'won' && i === r.attempts - 1 ? 'win' : (i < r.attempts ? 'used' : '') }));
+  nodes.push(el('p', { class: 'mute', text: 'Прочитай факти про свого Санту. У тебе ' + r.max + ' спроби — після кожної невдалої відкриється нова підказка.' }), dots);
+  var ul = el('ul', { class: 'facts' });
+  r.facts.forEach(function (t, i) { ul.appendChild(el('li', { 'data-n': i + 1, class: i >= 3 ? 'hint' : '', text: t })); });
+  nodes.push(ul);
+  if (r.guesses.length) {
+    var tried = el('div', { class: 'tried' }, ['Ти вже називав(ла): ']);
+    r.guesses.forEach(function (g, i) { tried.appendChild(el('s', { text: g })); if (i < r.guesses.length - 1) tried.appendChild(document.createTextNode(', ')); });
+    if (r.state === 'won') { tried.innerHTML = ''; tried.textContent = 'Спроб використано: ' + r.attempts + ' з ' + r.max; }
+    nodes.push(tried);
+  }
+  if (r.state === 'won') {
+    nodes.push(el('div', { class: 'msg win' }, [el('div', { class: 'em', text: '🎉' }), 'Так! Це твій таємний Санта:', el('b', { class: 'name', text: r.giver }), el('div', { text: 'Не забудь подякувати за подарунок!' })]));
+  } else if (r.state === 'lost') {
+    nodes.push(el('div', { class: 'msg lost' }, [el('div', { class: 'em', text: '🕵️' }), 'Твій Санта — дуже крутий конспіратор!', el('div', { text: 'Можливо, він сам тобі відкриється 😉' })]));
+  } else {
+    var chosen = null, errSlot = el('div');
+    var pickedBox = el('div', { class: 'picked hidden' });
+    var btn = el('button', { text: 'Це він/вона!', disabled: 'disabled', onclick: function () {
+      btn.disabled = true; btn.textContent = 'Перевіряємо…';
+      api({ action: 'guess', token: token, name: chosen }).then(function (x) {
+        if (x.status !== 'ok') { btn.disabled = false; btn.textContent = 'Це він/вона!'; errSlot.innerHTML = ''; errSlot.appendChild(errBox(x.message)); return; }
+        screenGuess(token, x);
+      });
+    } });
+    nodes.push(el('label', { text: 'Спроба ' + (r.attempts + 1) + ' з ' + r.max }), picker(NAMES.filter(function (n) { return r.guesses.indexOf(n) === -1; }), function (n) {
+      chosen = n; pickedBox.textContent = '✓ ' + n; pickedBox.classList.remove('hidden'); btn.removeAttribute('disabled');
+    }), pickedBox, errSlot, btn);
+  }
+  show(el('div', { class: 'card' }, nodes));
+}
+
+// ================= старт =================
+function start() {
+  var token = new URLSearchParams(location.search).get('g');
+  Promise.all([api({ action: 'list' }), token ? api({ action: 'open', token: token }) : Promise.resolve(null)]).then(function (res) {
+    var list = res[0], opened = res[1];
+    if (list.status !== 'ok') { show(el('div', { class: 'card' }, [el('h2', { text: 'Ой' }), errBox(list.message || 'Не вдалося завантажити дані.')])); return; }
+    NAMES = list.names;
+    if (token) {
+      if (opened.status !== 'ok') { show(el('div', { class: 'card' }, [el('h2', { text: 'Ой' }), errBox(opened.message)])); return; }
+      screenGuess(token, opened);
+    } else {
+      var saved = store('santa_name');
+      if (saved && NAMES.indexOf(saved) !== -1) {
+        api({ action: 'login', name: saved }).then(function (r) { if (r.status === 'ok') screenReveal(r); else screenName(); });
+      } else screenName();
+    }
+  });
+}
+start();
+</script>
+</body>
+</html>
