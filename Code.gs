@@ -3,7 +3,7 @@
 // Аркуші:
 //   «Учасники» — колонка A: ПІБ (з рядка 2, рядок 1 — заголовок). Джерело правди про учасників.
 //   «Пари»     — створюється автоматично при першому зверненні (див. ensurePairs_):
-//                A Санта | B Кому дарує | C Токен | D–H Факти 1–5 | I Спроби | J Статус | K Здогадки | L Оновлено | M Номер
+//                A Санта | B Кому дарує | C Токен | D–H Факти 1–5 | I Спроби | J Статус | K Здогадки | L Оновлено | M Номер | N Ключ пристрою | O Вхід
 //
 // Розподіл — один випадковий цикл по всіх учасниках (A→B→C→…→A): ніхто не витягне себе,
 // кожен має рівно одного Санту і дарує рівно одній людині.
@@ -14,7 +14,7 @@ var SHEET_PEOPLE_ = 'Учасники';
 var SHEET_PAIRS_ = 'Пари';
 var MAX_ATTEMPTS_ = 3;
 var FACT_MAX_LEN_ = 300;
-var COL_ = { GIVER: 0, RECIPIENT: 1, TOKEN: 2, FACTS: 3, ATTEMPTS: 8, STATUS: 9, GUESSES: 10, UPDATED: 11, NUM: 12 };
+var COL_ = { GIVER: 0, RECIPIENT: 1, TOKEN: 2, FACTS: 3, ATTEMPTS: 8, STATUS: 9, GUESSES: 10, UPDATED: 11, NUM: 12, KEY: 13, LOGINAT: 14 };
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -27,6 +27,7 @@ function doPost(e) {
       case 'saveFacts': return out_(saveFacts_(data));
       case 'open':      return out_(open_(data));
       case 'guess':     return out_(guess_(data));
+      case 'release':   return out_(release_(data));
       case 'adminLabels': return out_(adminLabels_(data));
       default:          return out_({ status: 'error', message: 'Невідома дія' });
     }
@@ -86,13 +87,13 @@ function ensurePairs_() {
   if (names.length < 3) throw new Error('Потрібно щонайменше 3 учасники в аркуші «' + SHEET_PEOPLE_ + '»');
   shuffle_(names);
   sh = ss.insertSheet(SHEET_PAIRS_);
-  var rows = [['Санта', 'Кому дарує', 'Токен', 'Факт 1', 'Факт 2', 'Факт 3', 'Підказка 1', 'Підказка 2', 'Спроби', 'Статус', 'Здогадки', 'Оновлено', 'Номер']];
+  var rows = [['Санта', 'Кому дарує', 'Токен', 'Факт 1', 'Факт 2', 'Факт 3', 'Підказка 1', 'Підказка 2', 'Спроби', 'Статус', 'Здогадки', 'Оновлено', 'Номер', 'Ключ пристрою', 'Вхід']];
   var used = {};
   // Номер подарунка — окрема випадкова перестановка 1..N (не пов'язана з ланцюжком розподілу)
   var nums = shuffle_(names.map(function (_, k) { return k + 1; }));
   for (var i = 0; i < names.length; i++) {
     var tok; do { tok = newToken_(); } while (used[tok]); used[tok] = true;
-    rows.push([names[i], names[(i + 1) % names.length], tok, '', '', '', '', '', 0, 'чекає', '', '', nums[i]]);
+    rows.push([names[i], names[(i + 1) % names.length], tok, '', '', '', '', '', 0, 'чекає', '', '', nums[i], '', '']);
   }
   sh.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
   return sh;
@@ -127,8 +128,19 @@ function login_(d) {
   var f = findByGiver_(d.name);
   if (!f) return { status: 'error', message: 'Не знайшли такого ПІБ у списку учасників. Оберіть себе зі списку.' };
   var row = f.rows[f.idx];
+  // Ім'я закріплюється за першим пристроєм, що його обрав (ключ у localStorage). Інші пристрої не пускаємо.
+  // Звільнити ім'я: очистити клітинку «Ключ пристрою» в аркуші «Пари».
+  var key = String(row[COL_.KEY] || '');
+  if (key) {
+    if (String(d.key || '') !== key) return { status: 'error', code: 'claimed', message: 'Це ім\'я вже обране на іншому пристрої. Якщо це ви — зверніться до адміністратора.' };
+  } else {
+    key = newToken_() + newToken_();
+    f.sh.getRange(f.idx + 1, COL_.KEY + 1).setValue(key);
+    f.sh.getRange(f.idx + 1, COL_.LOGINAT + 1).setValue(new Date());
+  }
   return {
     status: 'ok',
+    key: key,
     giver: row[COL_.GIVER],
     recipient: row[COL_.RECIPIENT],
     token: row[COL_.TOKEN],
@@ -139,10 +151,23 @@ function login_(d) {
   };
 }
 
+// «Це не я»: Санта помилково обрав чуже ім'я → звільняємо його (лише з тим самим ключем і поки факти не писались).
+function release_(d) {
+  var f = findByGiver_(d.name);
+  if (!f) return { status: 'error', message: 'Учасника не знайдено' };
+  var row = f.rows[f.idx];
+  if (row[COL_.KEY] && String(d.key || '') === String(row[COL_.KEY]) && !row[COL_.FACTS]) {
+    f.sh.getRange(f.idx + 1, COL_.KEY + 1).setValue('');
+    f.sh.getRange(f.idx + 1, COL_.LOGINAT + 1).setValue('');
+  }
+  return { status: 'ok' };
+}
+
 function saveFacts_(d) {
   var f = findByGiver_(d.name);
   if (!f) return { status: 'error', message: 'Учасника не знайдено' };
   var row = f.rows[f.idx];
+  if (!row[COL_.KEY] || String(d.key || '') !== String(row[COL_.KEY])) return { status: 'error', message: 'Немає доступу: це ім\'я закріплене за іншим пристроєм.' };
   if (Number(row[COL_.ATTEMPTS]) > 0) return { status: 'error', message: 'Одержувач уже почав відгадувати — змінити факти не можна.' };
   var facts = (d.facts || []).map(function (s) { return String(s || '').replace(/\s+/g, ' ').trim(); });
   if (facts.length !== 5 || facts.some(function (s) { return !s; })) return { status: 'error', message: 'Потрібно заповнити всі 5 фактів' };
@@ -210,7 +235,7 @@ function adminLabels_(d) {
   if (!key || String(d.key || '') !== key) return { status: 'error', message: 'Невірний ключ' };
   var rows = ensurePairs_().getDataRange().getValues().slice(1);
   var items = rows.map(function (r) {
-    return { num: Number(r[COL_.NUM]), giver: r[COL_.GIVER], recipient: r[COL_.RECIPIENT], token: r[COL_.TOKEN], hasFacts: !!r[COL_.FACTS], state: String(r[COL_.STATUS]) };
+    return { num: Number(r[COL_.NUM]), giver: r[COL_.GIVER], recipient: r[COL_.RECIPIENT], token: r[COL_.TOKEN], hasFacts: !!r[COL_.FACTS], claimed: !!r[COL_.KEY], state: String(r[COL_.STATUS]) };
   }).sort(function (a, b) { return a.num - b.num; });
   return { status: 'ok', items: items };
 }

@@ -88,6 +88,7 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbyX7EbEgr5N_en9wA-Z1J7SMm
 
 var app = document.getElementById('app');
 var NAMES = [];
+var DEVKEY = null; // ключ пристрою, що закріплює ПІБ за цим телефоном
 
 // ---------- утиліти ----------
 function el(tag, attrs, kids) {
@@ -152,14 +153,15 @@ function screenName(msg) {
   });
   function doLogin() {
     go.disabled = true; go.textContent = 'Шукаємо…';
-    api({ action: 'login', name: chosen }).then(function (r) {
+    api({ action: 'login', name: chosen, key: store('santa_key_' + chosen) || '' }).then(function (r) {
       if (r.status !== 'ok') { go.disabled = false; go.textContent = 'Далі'; errSlot.innerHTML = ''; errSlot.appendChild(errBox(r.message)); return; }
-      store('santa_name', chosen); screenReveal(r);
+      store('santa_name', chosen); store('santa_key_' + chosen, r.key); screenReveal(r);
     });
   }
   show(el('div', { class: 'card' }, [
     el('h2', { text: 'Привіт! Хто ти?' }),
     el('p', { class: 'mute', text: 'Знайди себе у списку — і дізнаєшся, кому цього року будеш таємним Сантою.' }),
+    el('p', { class: 'mute', text: '⚠ Обирай тільки себе: після входу ім\'я закріплюється за цим телефоном, і зайти знову можна лише з нього.' }),
     pk, pickedBox, errSlot, go
   ]));
   if (msg) errSlot.appendChild(errBox(msg));
@@ -172,16 +174,18 @@ function screenReveal(r) {
       el('div', { class: 'big', text: r.recipient }),
       el('p', { class: 'mute', text: 'Нікому не кажи! Тепер напиши про себе факти, за якими ' + r.recipient.split(' ')[1] + ' зможе тебе відгадати.' }),
       el('button', { text: 'Далі — написати факти', onclick: function () { screenFacts(r); } }),
-      r.facts[0] ? el('button', { class: 'gold', text: 'Мій номер подарунка', onclick: function () { screenDone(r); } }) : null,
-      el('button', { class: 'ghost', text: 'Це не я', onclick: function () { store('santa_name', null); screenName(); } })
+      r.facts[0] ? el('button', { class: 'gold', text: 'Мій номер подарунка', onclick: function () { screenDone(r); } }) : null
     ]));
   } });
   show(el('div', { class: 'card reveal' }, [
     el('div', { style: 'font-size:54px', text: '🤫' }),
     el('h2', { text: r.giver.split(' ')[1] ? 'Привіт, ' + r.giver.split(' ')[1] + '!' : 'Привіт!' }),
+    el('div', { class: 'mute', text: r.giver }),
     el('p', { class: 'mute', text: 'Переконайся, що поруч ніхто не дивиться на екран.' }),
     btn,
-    el('button', { class: 'ghost', text: 'Це не я', onclick: function () { store('santa_name', null); screenName(); } })
+    r.facts[0] ? null : el('button', { class: 'ghost', text: 'Це не я', onclick: function () {
+      api({ action: 'release', name: r.giver, key: r.key }).then(function () { store('santa_name', null); store('santa_key_' + r.giver, null); screenName(); });
+    } })
   ]));
 }
 
@@ -212,7 +216,7 @@ function screenFacts(r) {
     errSlot.innerHTML = '';
     if (facts.some(function (s) { return !s; })) { errSlot.appendChild(errBox('Заповніть усі 5 полів.')); return; }
     save.disabled = true; save.textContent = 'Зберігаємо…';
-    api({ action: 'saveFacts', name: r.giver, facts: facts }).then(function (x) {
+    api({ action: 'saveFacts', name: r.giver, key: r.key, facts: facts }).then(function (x) {
       if (x.status !== 'ok') { save.disabled = false; save.textContent = 'Зберегти'; errSlot.appendChild(errBox(x.message)); return; }
       r.facts = facts; r.token = x.token; r.number = x.number; screenDone(r);
     });
@@ -333,7 +337,7 @@ function start() {
     } else {
       var saved = store('santa_name');
       if (saved && NAMES.indexOf(saved) !== -1) {
-        api({ action: 'login', name: saved }).then(function (r) { if (r.status === 'ok') screenReveal(r); else screenName(); });
+        api({ action: 'login', name: saved, key: store('santa_key_' + saved) || '' }).then(function (r) { if (r.status === 'ok') screenReveal(r); else screenName(r.message); });
       } else screenName();
     }
   });
