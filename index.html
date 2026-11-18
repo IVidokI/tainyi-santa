@@ -58,8 +58,15 @@ button:disabled{opacity:.5;cursor:default}
 .qrbox img{width:230px;max-width:100%;image-rendering:pixelated}
 .qrbox .cap{font-weight:700;color:var(--dark);margin-top:8px}
 .hidden{display:none!important}
+.num{font-size:72px;font-weight:900;color:var(--red);line-height:1;margin:6px 0 14px}
+.labels{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-top:14px}
+.label{background:#fff;border:2px dashed var(--gold);border-radius:12px;padding:12px;text-align:center;break-inside:avoid;page-break-inside:avoid}
+.label .ln{font-size:34px;font-weight:900;color:var(--red)}
+.label .lto{font-size:16px;font-weight:700;margin:2px 0 6px;color:var(--dark)}
+.label img{width:150px;image-rendering:pixelated}
+.label .lcap{font-size:12px;color:var(--mute)}
 .spin{text-align:center;color:#fff;padding:40px 0}
-@media print{body{background:#fff}#snow,header,.noprint{display:none!important}.card{box-shadow:none;background:#fff}}
+@media print{body{background:#fff}#snow,header,.noprint{display:none!important}.card{box-shadow:none;background:#fff}.adminview .wrap{max-width:none;padding:0}.labels{grid-template-columns:repeat(3,1fr);margin-top:0}}
 </style>
 </head>
 <body>
@@ -76,6 +83,7 @@ button:disabled{opacity:.5;cursor:default}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <script>
 // ВСТАВТЕ URL розгорнутого Apps Script (Deploy → Web app → URL, закінчується на /exec)
+var SECRETARY = 'Шепелюк Анні';
 var API_URL = 'https://script.google.com/macros/s/AKfycbyX7EbEgr5N_en9wA-Z1J7SMmk9cOVLuKtRu9VmK58jHVlNigxsq2llkufiQiu01kou7g/exec';
 
 var app = document.getElementById('app');
@@ -164,6 +172,7 @@ function screenReveal(r) {
       el('div', { class: 'big', text: r.recipient }),
       el('p', { class: 'mute', text: 'Нікому не кажи! Тепер напиши про себе факти, за якими ' + r.recipient.split(' ')[1] + ' зможе тебе відгадати.' }),
       el('button', { text: 'Далі — написати факти', onclick: function () { screenFacts(r); } }),
+      r.facts[0] ? el('button', { class: 'gold', text: 'Мій номер подарунка', onclick: function () { screenDone(r); } }) : null,
       el('button', { class: 'ghost', text: 'Це не я', onclick: function () { store('santa_name', null); screenName(); } })
     ]));
   } });
@@ -186,7 +195,7 @@ function screenFacts(r) {
     ['Підказка 2', 'Відкриється після 2-ї невдалої спроби — майже очевидна']
   ];
   var errSlot = el('div');
-  var save = el('button', { text: r.locked ? 'Змінити вже не можна' : 'Зберегти і отримати QR', onclick: doSave });
+  var save = el('button', { text: r.locked ? 'Змінити вже не можна' : 'Зберегти', onclick: doSave });
   if (r.locked) save.disabled = true;
   var nodes = [el('h2', { text: 'Розкажи про себе' }),
     el('p', { class: 'mute', text: 'Пишіть так, щоб людина здогадалась, але не одразу. Не згадуйте посаду, відділ і стать — це занадто просто.' })];
@@ -204,8 +213,8 @@ function screenFacts(r) {
     if (facts.some(function (s) { return !s; })) { errSlot.appendChild(errBox('Заповніть усі 5 полів.')); return; }
     save.disabled = true; save.textContent = 'Зберігаємо…';
     api({ action: 'saveFacts', name: r.giver, facts: facts }).then(function (x) {
-      if (x.status !== 'ok') { save.disabled = false; save.textContent = 'Зберегти і отримати QR'; errSlot.appendChild(errBox(x.message)); return; }
-      r.facts = facts; r.token = x.token; screenQR(r);
+      if (x.status !== 'ok') { save.disabled = false; save.textContent = 'Зберегти'; errSlot.appendChild(errBox(x.message)); return; }
+      r.facts = facts; r.token = x.token; r.number = x.number; screenDone(r);
     });
   }
 }
@@ -217,41 +226,55 @@ function makeQrDataUrl(url, cell) {
   return q.createDataURL(cell || 8, 2);
 }
 
-// PNG-етикетка для друку/збереження: QR + підпис.
-function makeTagPng(url) {
-  return new Promise(function (res) {
-    var img = new Image();
-    img.onload = function () {
-      var W = 640, H = 760, c = document.createElement('canvas'); c.width = W; c.height = H;
-      var x = c.getContext('2d');
-      x.fillStyle = '#fff8ec'; x.fillRect(0, 0, W, H);
-      x.strokeStyle = '#e8b44c'; x.lineWidth = 6; x.setLineDash([16, 10]); x.strokeRect(14, 14, W - 28, H - 28); x.setLineDash([]);
-      x.textAlign = 'center'; x.fillStyle = '#7a1420';
-      x.font = 'bold 40px system-ui,sans-serif'; x.fillText('🎅 Таємний Санта', W / 2, 90);
-      x.imageSmoothingEnabled = false; x.drawImage(img, 90, 130, 460, 460);
-      x.font = 'bold 30px system-ui,sans-serif'; x.fillText('Скануй і відгадай,', W / 2, 650);
-      x.fillText('хто твій Санта', W / 2, 692);
-      res(c.toDataURL('image/png'));
-    };
-    img.src = makeQrDataUrl(url, 10);
-  });
+// Фінальний екран Санти: номер подарунка (без QR — етикетки друкує адміністратор).
+function screenDone(r) {
+  show(el('div', { class: 'card reveal' }, [
+    el('div', { style: 'font-size:48px', text: '✅' }),
+    el('h2', { text: 'Готово! Факти збережено' }),
+    el('div', { class: 'mute', text: 'Твій номер подарунка' }),
+    el('div', { class: 'num', text: String(r.number) }),
+    el('p', { text: 'Напиши цей номер на подарунку або на листочку й передай секретарю ' + SECRETARY + ' разом із подарунком для ' + r.recipient + '.' }),
+    el('p', { class: 'mute', text: 'QR-код друкувати не треба — його приклеять до подарунка за номером. Сторінку можна відкрити пізніше: введи своє ПІБ — номер і факти збережуться.' }),
+    el('button', { class: 'ghost', text: '✏ Змінити факти', onclick: function () { screenFacts(r); } })
+  ]));
 }
 
-function screenQR(r) {
-  var url = giftUrl(r.token);
-  var png = null;
-  var box = el('div', { class: 'qrbox' }, [el('img', { src: makeQrDataUrl(url, 8), alt: 'QR-код для подарунка' }), el('div', { class: 'cap', text: 'Скануй і відгадай, хто твій Санта' })]);
-  var dl = el('button', { class: 'gold', text: '⬇ Завантажити етикетку (PNG)', onclick: function () {
-    makeTagPng(url).then(function (d) { var a = el('a', { href: d, download: 'santa-qr.png' }); document.body.appendChild(a); a.click(); a.remove(); });
+// ================= АДМІНІСТРАТОР: етикетки для друку =================
+function screenAdmin() {
+  var key = el('input', { type: 'text', placeholder: 'Ключ адміністратора', autocomplete: 'off' });
+  var errSlot = el('div');
+  var go = el('button', { text: 'Показати етикетки', onclick: function () {
+    go.disabled = true; errSlot.innerHTML = '';
+    api({ action: 'adminLabels', key: key.value.trim() }).then(function (r) {
+      go.disabled = false;
+      if (r.status !== 'ok') { errSlot.appendChild(errBox(r.message)); return; }
+      renderLabels(r.items);
+    });
   } });
-  show(el('div', { class: 'card' }, [
-    el('h2', { text: '✅ Готово!' }),
-    el('p', { text: 'Роздрукуй або збережи цей QR-код і прикріпи до подарунка для ' + r.recipient + '.' }),
-    box, dl,
-    el('button', { class: 'noprint', text: '🖨 Друкувати', onclick: function () { window.print(); } }),
-    el('button', { class: 'ghost noprint', text: '✏ Змінити факти', onclick: function () { screenFacts(r); } }),
-    el('p', { class: 'mute noprint', style: 'margin-top:14px', text: 'Цю сторінку можна відкрити пізніше: введи своє ПІБ — QR-код і факти збережуться.' })
-  ]));
+  show(el('div', { class: 'card' }, [el('h2', { text: 'Адміністратор' }), key, errSlot, go]));
+}
+
+function renderLabels(items) {
+  var base = location.origin + location.pathname;
+  var done = items.filter(function (i) { return i.hasFacts; }).length;
+  var missing = items.filter(function (i) { return !i.hasFacts; }).map(function (i) { return '№' + i.num + ' ' + i.giver; });
+  var info = el('div', { class: 'card noprint' }, [
+    el('h2', { text: 'Етикетки: ' + items.length }),
+    el('p', { text: 'Факти написали ' + done + ' з ' + items.length + '. Друкуйте, коли всі готові (етикетка без фактів теж працює — просто покаже «Санта ще не написав»).' }),
+    missing.length ? el('details', { class: 'mute' }, [el('summary', { text: 'Ще не написали: ' + missing.length }), el('p', { text: missing.join('; ') })]) : null,
+    el('button', { text: '🖨 Друкувати / зберегти як PDF', onclick: function () { window.print(); } })
+  ]);
+  var grid = el('div', { class: 'labels' });
+  items.forEach(function (i) {
+    grid.appendChild(el('div', { class: 'label' }, [
+      el('div', { class: 'ln', text: '№ ' + i.num }),
+      el('div', { class: 'lto', text: 'Кому: ' + i.recipient }),
+      el('img', { src: makeQrDataUrl(base + '?g=' + encodeURIComponent(i.token), 6), alt: 'QR' }),
+      el('div', { class: 'lcap', text: 'Скануй і відгадай, хто твій таємний Санта' })
+    ]));
+  });
+  document.body.classList.add('adminview');
+  show(info, grid);
 }
 
 // ================= ОДЕРЖУВАЧ (QR на подарунку) =================
@@ -298,6 +321,7 @@ function screenGuess(token, r) {
 
 // ================= старт =================
 function start() {
+  if (new URLSearchParams(location.search).has('admin')) { screenAdmin(); return; }
   var token = new URLSearchParams(location.search).get('g');
   Promise.all([api({ action: 'list' }), token ? api({ action: 'open', token: token }) : Promise.resolve(null)]).then(function (res) {
     var list = res[0], opened = res[1];

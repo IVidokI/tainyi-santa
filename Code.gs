@@ -3,7 +3,7 @@
 // Аркуші:
 //   «Учасники» — колонка A: ПІБ (з рядка 2, рядок 1 — заголовок). Джерело правди про учасників.
 //   «Пари»     — створюється автоматично при першому зверненні (див. ensurePairs_):
-//                A Санта | B Кому дарує | C Токен | D–H Факти 1–5 | I Спроби | J Статус | K Здогадки | L Оновлено
+//                A Санта | B Кому дарує | C Токен | D–H Факти 1–5 | I Спроби | J Статус | K Здогадки | L Оновлено | M Номер
 //
 // Розподіл — один випадковий цикл по всіх учасниках (A→B→C→…→A): ніхто не витягне себе,
 // кожен має рівно одного Санту і дарує рівно одній людині.
@@ -14,7 +14,7 @@ var SHEET_PEOPLE_ = 'Учасники';
 var SHEET_PAIRS_ = 'Пари';
 var MAX_ATTEMPTS_ = 3;
 var FACT_MAX_LEN_ = 300;
-var COL_ = { GIVER: 0, RECIPIENT: 1, TOKEN: 2, FACTS: 3, ATTEMPTS: 8, STATUS: 9, GUESSES: 10, UPDATED: 11 };
+var COL_ = { GIVER: 0, RECIPIENT: 1, TOKEN: 2, FACTS: 3, ATTEMPTS: 8, STATUS: 9, GUESSES: 10, UPDATED: 11, NUM: 12 };
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
@@ -27,6 +27,7 @@ function doPost(e) {
       case 'saveFacts': return out_(saveFacts_(data));
       case 'open':      return out_(open_(data));
       case 'guess':     return out_(guess_(data));
+      case 'adminLabels': return out_(adminLabels_(data));
       default:          return out_({ status: 'error', message: 'Невідома дія' });
     }
   } catch (err) {
@@ -85,11 +86,13 @@ function ensurePairs_() {
   if (names.length < 3) throw new Error('Потрібно щонайменше 3 учасники в аркуші «' + SHEET_PEOPLE_ + '»');
   shuffle_(names);
   sh = ss.insertSheet(SHEET_PAIRS_);
-  var rows = [['Санта', 'Кому дарує', 'Токен', 'Факт 1', 'Факт 2', 'Факт 3', 'Підказка 1', 'Підказка 2', 'Спроби', 'Статус', 'Здогадки', 'Оновлено']];
+  var rows = [['Санта', 'Кому дарує', 'Токен', 'Факт 1', 'Факт 2', 'Факт 3', 'Підказка 1', 'Підказка 2', 'Спроби', 'Статус', 'Здогадки', 'Оновлено', 'Номер']];
   var used = {};
+  // Номер подарунка — окрема випадкова перестановка 1..N (не пов'язана з ланцюжком розподілу)
+  var nums = shuffle_(names.map(function (_, k) { return k + 1; }));
   for (var i = 0; i < names.length; i++) {
     var tok; do { tok = newToken_(); } while (used[tok]); used[tok] = true;
-    rows.push([names[i], names[(i + 1) % names.length], tok, '', '', '', '', '', 0, 'чекає', '', '']);
+    rows.push([names[i], names[(i + 1) % names.length], tok, '', '', '', '', '', 0, 'чекає', '', '', nums[i]]);
   }
   sh.getRange(1, 1, rows.length, rows[0].length).setValues(rows);
   return sh;
@@ -129,6 +132,7 @@ function login_(d) {
     giver: row[COL_.GIVER],
     recipient: row[COL_.RECIPIENT],
     token: row[COL_.TOKEN],
+    number: row[COL_.NUM],
     facts: factsOf_(row),
     locked: Number(row[COL_.ATTEMPTS]) > 0,
     state: String(row[COL_.STATUS])
@@ -147,7 +151,7 @@ function saveFacts_(d) {
   f.sh.getRange(r, COL_.FACTS + 1, 1, 5).setValues([facts]);
   f.sh.getRange(r, COL_.STATUS + 1).setValue('грає');
   f.sh.getRange(r, COL_.UPDATED + 1).setValue(new Date());
-  return { status: 'ok', token: row[COL_.TOKEN] };
+  return { status: 'ok', token: row[COL_.TOKEN], number: row[COL_.NUM] };
 }
 
 // Одержувач сканує QR (токен) → бачить 3 факти + відкриті підказки.
@@ -197,6 +201,18 @@ function guess_(d) {
   var v = view_(row);
   v.correct = correct;
   return v;
+}
+
+// Етикетки для адміністратора: номер, кому дарує, токен QR. Потрібен ключ ADMIN_KEY
+// (Apps Script → Project Settings → Script properties). Без ключа в налаштуваннях доступ вимкнено.
+function adminLabels_(d) {
+  var key = PropertiesService.getScriptProperties().getProperty('ADMIN_KEY');
+  if (!key || String(d.key || '') !== key) return { status: 'error', message: 'Невірний ключ' };
+  var rows = ensurePairs_().getDataRange().getValues().slice(1);
+  var items = rows.map(function (r) {
+    return { num: Number(r[COL_.NUM]), giver: r[COL_.GIVER], recipient: r[COL_.RECIPIENT], token: r[COL_.TOKEN], hasFacts: !!r[COL_.FACTS], state: String(r[COL_.STATUS]) };
+  }).sort(function (a, b) { return a.num - b.num; });
+  return { status: 'ok', items: items };
 }
 
 // ---------- для адміністратора (▶ Run у редакторі) ----------
